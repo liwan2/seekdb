@@ -39,6 +39,8 @@ To separate token execution from per-query overhead, an additional SQL BENCHMARK
 
 ## Reproduction
 
+See [LATEST.md](LATEST.md) for the current follow-up to the reported 16.59/50 result, encoded FTS build sorting, binary-ID merging, default-configuration reuse, eight-suite validation and incremental measurements against dbdd681d.
+
 See [FOLLOWUP.md](FOLLOWUP.md) for the latest dictionary/map optimizations, sorted-page correctness fix, final regression coverage and subsequent measurements. The table above documents the earlier submission.
 
 Build with `cmake --build build_release --target observer -j4`. Start an isolated instance with the resource settings above. Run mysqltest with the checked-in test/result pairs. Set MYSQL and MYSQL_VERBOSE to its obclient command and run tools/benchmark/fts_large_bench.sh with the exact environment values above. The script recreates fts_large_bench: use an isolated test database, never user data.

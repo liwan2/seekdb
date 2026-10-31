@@ -52,6 +52,11 @@ int ObTextDaaTIter::get_next_rows(const int64_t capacity, int64_t &count)
   count = 0;
   const auto *limit = iter_param_->limit_param_;
   const int64_t real_capacity = MIN(capacity, iter_param_->max_batch_size_);
+  // For a short binary-ID union, compare posting heads directly instead of
+  // pushing, rebuilding and popping a polymorphic merger for every document.
+  const bool binary_short_union = dim_iters_->count() <= 8
+      && iter_param_->id_proj_expr_->datum_meta_.type_ == common::ObVarcharType
+      && iter_param_->id_proj_expr_->datum_meta_.cs_type_ == common::CS_TYPE_BINARY;
   if (capacity <= 0) {
   } else if (dim_iters_->empty() || (limit->is_valid() && output_row_cnt_ >= limit->limit_)) {
     ret = OB_ITER_END;
@@ -64,12 +69,48 @@ int ObTextDaaTIter::get_next_rows(const int64_t capacity, int64_t &count)
         item.iter_idx_ = idx;
         item.relevance_ = 1.0;
         if (OB_FAIL(dim->get_next_row())) {
-          if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
+          if (ret == OB_ITER_END) {
+            iter_domain_ids_[idx] = nullptr;
+            ret = OB_SUCCESS;
+          }
         } else if (OB_FAIL(dim->get_curr_id(iter_domain_ids_[idx]))) {
-        } else if (OB_FAIL(merge_heap_->push(item))) {
+        } else if (!binary_short_union && OB_FAIL(merge_heap_->push(item))) {
         }
       }
       if (OB_FAIL(ret)) {
+      } else if (binary_short_union) {
+        int64_t first = -1;
+        next_round_cnt_ = 0;
+        for (int64_t i = 0; i < dim_iters_->count(); ++i) {
+          if (nullptr != iter_domain_ids_[i]) {
+            int cmp = -1;
+            if (first >= 0) {
+              const ObDatum &left = *iter_domain_ids_[i];
+              const ObDatum &right = *iter_domain_ids_[first];
+              if (left.is_null() || right.is_null()) {
+                cmp = left.is_null() ? (right.is_null() ? 0 : -1) : 1;
+              } else {
+                const int64_t length = MIN(left.len_, right.len_);
+                cmp = length > 0 ? MEMCMP(left.ptr_, right.ptr_, length) : 0;
+                if (cmp == 0) {
+                  cmp = (left.len_ > right.len_) - (left.len_ < right.len_);
+                }
+              }
+            }
+            if (cmp <= 0) {
+              if (cmp < 0) {
+                first = i;
+                next_round_cnt_ = 0;
+              }
+              next_round_iter_idxes_[next_round_cnt_++] = i;
+            }
+          }
+        }
+        if (first < 0) {
+          ret = OB_ITER_END;
+        } else {
+          ret = ObSRDaaTIterImpl::cache_result(count, *iter_domain_ids_[first], 1.0);
+        }
       } else if (merge_heap_->empty()) {
         ret = OB_ITER_END;
       } else if (next_round_cnt_ != 0 && OB_FAIL(merge_heap_->rebuild())) {
