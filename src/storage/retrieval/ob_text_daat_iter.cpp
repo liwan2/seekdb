@@ -39,6 +39,69 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
   return ret;
 }
 
+int ObTextDaaTIter::get_next_rows(const int64_t capacity, int64_t &count)
+{
+  // The natural-language existence path is a union of posting lists. Keep
+  // Boolean collectors, function lookups and scored searches on the generic path.
+  if (!is_inited_ || iter_param_->relevance_expr_ != nullptr
+      || mode_flag_ != sql::NATURAL_LANGUAGE_MODE || function_lookup_mode_
+      || iter_param_->need_filter()) {
+    return ObSRDaaTIterImpl::get_next_rows(capacity, count);
+  }
+  int ret = OB_SUCCESS;
+  count = 0;
+  const auto *limit = iter_param_->limit_param_;
+  const int64_t real_capacity = MIN(capacity, iter_param_->max_batch_size_);
+  if (capacity <= 0) {
+  } else if (dim_iters_->empty() || (limit->is_valid() && output_row_cnt_ >= limit->limit_)) {
+    ret = OB_ITER_END;
+  } else {
+    while (OB_SUCC(ret) && count < real_capacity) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
+        const int64_t idx = next_round_iter_idxes_[i];
+        ObISRDaaTDimIter *dim = dim_iters_->at(idx);
+        ObSRMergeItem item;
+        item.iter_idx_ = idx;
+        item.relevance_ = 1.0;
+        if (OB_FAIL(dim->get_next_row())) {
+          if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
+        } else if (OB_FAIL(dim->get_curr_id(iter_domain_ids_[idx]))) {
+        } else if (OB_FAIL(merge_heap_->push(item))) {
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (merge_heap_->empty()) {
+        ret = OB_ITER_END;
+      } else if (next_round_cnt_ != 0 && OB_FAIL(merge_heap_->rebuild())) {
+      } else {
+        next_round_cnt_ = 0;
+        int64_t idx = -1;
+        bool doc_end = false;
+        while (OB_SUCC(ret) && !merge_heap_->empty() && !doc_end) {
+          const ObSRMergeItem *item = nullptr;
+          doc_end = merge_heap_->is_unique_champion();
+          if (OB_FAIL(merge_heap_->top(item))) {
+          } else {
+            idx = item->iter_idx_;
+            if (OB_FAIL(merge_heap_->pop())) {
+            } else {
+              next_round_iter_idxes_[next_round_cnt_++] = idx;
+            }
+          }
+        }
+        if (OB_SUCC(ret)) {
+          ret = ObSRDaaTIterImpl::cache_result(count, *iter_domain_ids_[idx], 1.0);
+        }
+      }
+    }
+    if ((OB_SUCC(ret) || ret == OB_ITER_END) && count > 0) {
+      const int project_ret = ObSRDaaTIterImpl::project_results(count);
+      if (project_ret != OB_SUCCESS) { ret = project_ret; }
+    }
+  }
+  return ret;
+}
+
 void ObTextDaaTIter::reset()
 {
   bm25_param_estimator_.reset();

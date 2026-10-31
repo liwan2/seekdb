@@ -242,64 +242,53 @@ int ObIndexBuildTask::process()
   } else if (!need_retry()) {
     // by pass
   } else {
-    const bool fts_aux = share::schema::is_fts_index_aux(create_index_arg_.index_type_)
-        || share::schema::is_fts_doc_word_aux(create_index_arg_.index_type_);
-    const int64_t max_steps = fts_aux ? 8 : 1;
-    for (int64_t step = 0; OB_SUCC(ret) && need_retry() && step < max_steps; ++step) {
-      const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
-      switch (status) {
-      case ObDDLTaskStatus::PREPARE: {
-        if (OB_FAIL(prepare())) {
+    const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
+    switch (status) {
+    case ObDDLTaskStatus::PREPARE: {
+      if (OB_FAIL(prepare())) {
+      }
+      break;
+    }
+    case ObDDLTaskStatus::WAIT_TRANS_END: {
+      if (OB_FAIL(wait_trans_end())) {
+      }
+      break;
+    }
+    case ObDDLTaskStatus::REDEFINITION: {
+      if (is_create_partitioned_local_index()) {
+        if (OB_FAIL(wait_local_index_data_complement())) {
         }
-        break;
-      }
-      case ObDDLTaskStatus::WAIT_TRANS_END: {
-        if (OB_FAIL(wait_trans_end())) {
+      } else {
+        if (OB_FAIL(wait_data_complement())) {
         }
-        break;
       }
-      case ObDDLTaskStatus::REDEFINITION: {
-        if (is_create_partitioned_local_index()) {
-          if (OB_FAIL(wait_local_index_data_complement())) {
-          }
-        } else {
-          if (OB_FAIL(wait_data_complement())) {
-          }
-        }
-        break;
+      break;
+    }
+    case ObDDLTaskStatus::VALIDATE_CHECKSUM: {
+      if (OB_FAIL(verify_checksum())) {
       }
-      case ObDDLTaskStatus::VALIDATE_CHECKSUM: {
-        if (OB_FAIL(verify_checksum())) {
-        }
-        break;
+      break;
+    }
+    case ObDDLTaskStatus::TAKE_EFFECT: {
+      if (OB_FAIL(enable_index())) {
       }
-      case ObDDLTaskStatus::TAKE_EFFECT: {
-        if (OB_FAIL(enable_index())) {
-        }
-        break;
+      break;
+    }
+    case ObDDLTaskStatus::FAIL: {
+      if (OB_FAIL(clean_on_failed())) {
       }
-      case ObDDLTaskStatus::FAIL: {
-        if (OB_FAIL(clean_on_failed())) {
-        }
-        break;
+      break;
+    }
+    case ObDDLTaskStatus::SUCCESS: {
+      if (OB_FAIL(succ())) {
       }
-      case ObDDLTaskStatus::SUCCESS: {
-        if (OB_FAIL(succ())) {
-        }
-        break;
-      }
-      default: {
-        ret = OB_ERR_UNEXPECTED;
-        break;
-      }
-      } // end switch
-      if (OB_FAIL(ret) || task_status_ == status
-          || status == ObDDLTaskStatus::SUCCESS || status == ObDDLTaskStatus::FAIL) {
-        break;
-      } else if (step + 1 < max_steps && OB_FAIL(check_health())) {
-        break;
-      }
-    } // bounded progress loop
+      break;
+    }
+    default: {
+      ret = OB_ERR_UNEXPECTED;
+      break;
+    }
+    } // end switch
     if (OB_FAIL(ret)) {
       add_event_info("index build task process fail");
       LOG_INFO("index build task process fail", "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));

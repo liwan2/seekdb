@@ -221,67 +221,58 @@ int ObFtsIndexBuildTask::process()
   } else if (!need_retry()) {
     // by pass
   } else {
-    // Advance completed states immediately. An asynchronous wait that makes
-    // no progress returns to the scheduler, without spinning.
-    for (int64_t step = 0; OB_SUCC(ret) && need_retry() && step < 8; ++step) {
-      const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
-      switch (status) {
-      case ObDDLTaskStatus::PREPARE: {
-        if (OB_FAIL(prepare())) {
-        }
-        break;
+    // switch case for diff create_index_arg, since there are 4 aux fts tables
+    const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
+    switch (status) {
+    case ObDDLTaskStatus::PREPARE: {
+      if (OB_FAIL(prepare())) {
       }
-      case ObDDLTaskStatus::GENERATE_ROWKEY_DOC_SCHEMA: {
-        if (OB_FAIL(prepare_rowkey_doc_table())) {
-        }
-        break;
+      break;
+    }
+    case ObDDLTaskStatus::GENERATE_ROWKEY_DOC_SCHEMA: {
+      if (OB_FAIL(prepare_rowkey_doc_table())) {
       }
-      case ObDDLTaskStatus::WAIT_ROWKEY_DOC_TABLE_COMPLEMENT: {
-        if (OB_FAIL(wait_aux_table_complement())) {
-        }
-        break;
+      break;
+    }
+    case ObDDLTaskStatus::WAIT_ROWKEY_DOC_TABLE_COMPLEMENT: {
+      if (OB_FAIL(wait_aux_table_complement())) {
       }
-      case ObDDLTaskStatus::LOAD_DICTIONARY: {
-        if (OB_FAIL(load_dictionary())) {
-        }
-        break;
+      break;
+    }
+    case ObDDLTaskStatus::LOAD_DICTIONARY: {
+      if (OB_FAIL(load_dictionary())) {
       }
-      case ObDDLTaskStatus::GENERATE_DOC_AUX_SCHEMA: {
-        if (OB_FAIL(prepare_aux_index_tables())) {
-        }
-        break;
+      break;
+    }
+    case ObDDLTaskStatus::GENERATE_DOC_AUX_SCHEMA: {
+      if (OB_FAIL(prepare_aux_index_tables())) {
       }
-      case ObDDLTaskStatus::WAIT_AUX_TABLE_COMPLEMENT: {
-        if (OB_FAIL(wait_aux_table_complement())) {
-        }
-        break;
+      break;
+    }
+    case ObDDLTaskStatus::WAIT_AUX_TABLE_COMPLEMENT: {
+      if (OB_FAIL(wait_aux_table_complement())) {
       }
-      case ObDDLTaskStatus::TAKE_EFFECT:{
-        if (OB_FAIL(wait_schema_refresh_and_trans_end())) {
-        }
-        break;
+      break;
+    }
+    case ObDDLTaskStatus::TAKE_EFFECT:{
+      if (OB_FAIL(wait_schema_refresh_and_trans_end())) {
       }
-      case ObDDLTaskStatus::FAIL: {
-        if (OB_FAIL(clean_on_failed())) {
-        }
-        break;
+      break;
+    }
+    case ObDDLTaskStatus::FAIL: {
+      if (OB_FAIL(clean_on_failed())) {
       }
-      case ObDDLTaskStatus::SUCCESS: {
-        if (OB_FAIL(succ())) {
-        }
-        break;
+      break;
+    }
+    case ObDDLTaskStatus::SUCCESS: {
+      if (OB_FAIL(succ())) {
       }
-      default: {
-        ret = OB_ERR_UNEXPECTED;
-      }
-      } // end switch
-      if (OB_FAIL(ret) || task_status_ == status
-          || status == ObDDLTaskStatus::SUCCESS || status == ObDDLTaskStatus::FAIL) {
-        break;
-      } else if (OB_FAIL(check_health())) {
-        break;
-      }
-    } // bounded progress loop
+      break;
+    }
+    default: {
+      ret = OB_ERR_UNEXPECTED;
+    }
+    } // end switch
   }
   return ret;
 }
