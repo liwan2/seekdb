@@ -39,4 +39,6 @@ To separate token execution from per-query overhead, an additional SQL BENCHMARK
 
 ## Reproduction
 
+See [FOLLOWUP.md](FOLLOWUP.md) for the latest dictionary/map optimizations, sorted-page correctness fix, final regression coverage and subsequent measurements. The table above documents the earlier submission.
+
 Build with `cmake --build build_release --target observer -j4`. Start an isolated instance with the resource settings above. Run mysqltest with the checked-in test/result pairs. Set MYSQL and MYSQL_VERBOSE to its obclient command and run tools/benchmark/fts_large_bench.sh with the exact environment values above. The script recreates fts_large_bench: use an isolated test database, never user data.

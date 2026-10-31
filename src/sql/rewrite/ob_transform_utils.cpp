@@ -12845,6 +12845,13 @@ int ObTransformUtils::inner_check_need_calc_match_score(ObExecContext *exec_ctx,
   } else if (expr == match_expr) {
     need_calc = true;
     need_check_child = false;
+  } else if (expr->is_column_ref_expr()) {
+    // Keep the original retrieval lifecycle when a document column is
+    // observed outside MATCH (including lookup predicates and TOP-N keys).
+    // The score-free posting path is currently qualified only for cardinality
+    // consumers; dynamic lookup filters can otherwise change a sorted page.
+    need_calc = true;
+    need_check_child = false;
   } else if (expr->get_expr_type() == T_OP_GT || expr->get_expr_type() == T_OP_LT) {
     ObRawExpr *gt_param = NULL;
     ObRawExpr *lt_param = NULL;
